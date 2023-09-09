@@ -12,6 +12,7 @@ from tap import Tap  # pip install typed-argument-parser (https://github.com/swa
 import numpy as np
 
 import chemprop.data.utils
+from chemprop.constants import ADDITIONAL_ATOM_DESCRIPTORS
 from chemprop.data import set_cache_mol, empty_cache
 from chemprop.features import get_available_features_generators
 
@@ -423,6 +424,10 @@ class TrainArgs(CommonArgs):
     Whether RDKit molecules will be constructed with adding the Hs to them. This option is intended to be used
     with Chemprop's default molecule or multi-molecule encoders, or in :code:`reaction_solvent` mode where it applies to the solvent only.
     """
+    additional_atom_descriptors: List[str] = None
+    """
+    Additional atomic descriptors that are included along with the basic RDKit counts used in the MPNN.
+    """
     is_atom_bond_targets: bool = False
     """
     whether this is atomic/bond properties prediction.
@@ -642,6 +647,21 @@ class TrainArgs(CommonArgs):
                 config = json.load(f)
                 for key, value in config.items():
                     setattr(self, key, value)
+
+        # Additional descriptors
+        if self.additional_atom_descriptors:
+            for descriptor in self.additional_atom_descriptors:
+                if not any([descriptor in ADDITIONAL_ATOM_DESCRIPTORS]):
+                    raise ValueError(f'Additional descriptor "{descriptor}" invalid".'
+                                     'Accepted additional atomic descriptors: '
+                                     f'{ADDITIONAL_ATOM_DESCRIPTORS}')
+
+        # Add Hs and use explicit Hs for Jazzy or Kallisto
+        if self.additional_atom_descriptors:
+            if any(descriptor in ['jazzy', 'kallisto']
+                   for descriptor in self.additional_atom_descriptors):
+                self.explicit_h = True
+                self.adding_h = True
 
         # Determine the target_columns when training atomic and bond targets
         if self.is_atom_bond_targets:

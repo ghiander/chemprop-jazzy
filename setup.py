@@ -54,6 +54,7 @@ setup(
         "descriptastorus<2.6.1 ; python_version=='3.7'",
         "scipy>=1.9 ; python_version=='3.8'",
         "descriptastorus>=2.6.1 ; python_version=='3.8'",
+        "jazzy>=0.0.11"
     ],
     extras_require={"test": ["pytest>=6.2.2", "parameterized>=0.8.1"]},
     python_requires=">=3.7",

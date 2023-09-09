@@ -1,4 +1,4 @@
-name: chemprop
+name: jazzprop
 
 channels:
   - pytorch
@@ -21,6 +21,7 @@ dependencies:
   - tensorboardX>=2.0
   - torchvision>=0.5.0
   - tqdm>=4.45.0
+  - jazzy>=0.0.11
   - pip:
     - typed-argument-parser>=1.6.1
     - git+https://github.com/bp-kelley/descriptastorus

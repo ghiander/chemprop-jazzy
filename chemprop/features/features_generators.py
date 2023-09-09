@@ -103,7 +103,6 @@ try:
         smiles = Chem.MolToSmiles(mol, isomericSmiles=True) if type(mol) != str else mol
         generator = rdDescriptors.RDKit2D()
         features = generator.process(smiles)[1:]
-
         return features
 
     @register_features_generator('rdkit_2d_normalized')
@@ -132,6 +131,48 @@ except ImportError:
         raise ImportError('Failed to import descriptastorus. Please install descriptastorus '
                           '(https://github.com/bp-kelley/descriptastorus) to use RDKit 2D normalized features.')
 
+try:
+    from jazzy.api import molecular_vector_from_smiles
+
+    @register_features_generator('jazzy_hbs')
+    def jazzy_features_generator(mol: Molecule) -> np.ndarray:
+        """
+        Generates Jazzy features for a molecule.
+
+        :param mol: A molecule (i.e., either a SMILES or an RDKit molecule).
+        :return: A 1D numpy array containing the hydrogen-bond strength Jazzy features.
+        """
+        selected_features = ["sdc", "sdx", "sa"]
+        smiles = Chem.MolToSmiles(mol, isomericSmiles=True) if type(mol) != str else mol
+        features = molecular_vector_from_smiles(smiles)
+        features = [v for k, v in features.items() if k in selected_features]
+        return features
+
+    @register_features_generator('jazzy_hyd')
+    def jazzy_features_generator(mol: Molecule) -> np.ndarray:
+        """
+        Generates Jazzy features for a molecule.
+
+        :param mol: A molecule (i.e., either a SMILES or an RDKit molecule).
+        :return: A 1D numpy array containing the free energy of hydration Jazzy features.
+        """
+        selected_features = ["dga", "dgp"]
+        smiles = Chem.MolToSmiles(mol, isomericSmiles=True) if type(mol) != str else mol
+        features = molecular_vector_from_smiles(smiles)
+        features = [v for k, v in features.items() if k in selected_features]
+        return features
+except ImportError:
+    @register_features_generator('jazzy_hbs')
+    def jazzy_features_generator(mol: Molecule) -> np.ndarray:
+        """Mock implementation raising an ImportError if jazzy cannot be imported."""
+        raise ImportError('Failed to import jazzy. Please install jazzy '
+                          '(https://pypi.org/project/jazzy/) to use jazzy features.')
+    
+    @register_features_generator('jazzy_hyd')
+    def jazzy_features_generator(mol: Molecule) -> np.ndarray:
+        """Mock implementation raising an ImportError if jazzy cannot be imported."""
+        raise ImportError('Failed to import jazzy. Please install jazzy '
+                          '(https://pypi.org/project/jazzy/) to use jazzy features.')
 
 """
 Custom features generator template.

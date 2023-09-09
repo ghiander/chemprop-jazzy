@@ -1,4 +1,6 @@
 """Chemprop integration tests."""
+import tarfile
+import tempfile
 from flask import url_for
 from io import BytesIO
 import json
@@ -13,12 +15,13 @@ import numpy as np
 import pandas as pd
 from parameterized import parameterized
 
+from chemprop.args import PredictArgs
 from chemprop.constants import TEST_SCORES_FILE_NAME
 from chemprop.hyperparameter_optimization import chemprop_hyperopt
 from chemprop.interpret import chemprop_interpret
 from chemprop.sklearn_predict import sklearn_predict
 from chemprop.sklearn_train import sklearn_train
-from chemprop.train import chemprop_train, chemprop_predict, evaluate_predictions, chemprop_fingerprint
+from chemprop.train import chemprop_train, chemprop_predict, evaluate_predictions, chemprop_fingerprint, load_model, make_predictions
 from chemprop.web.wsgi import build_app
 from chemprop.spectra_utils import normalize_spectra, load_phase_mask
 from chemprop.features import load_features
@@ -32,6 +35,11 @@ NUM_ITER = 2
 SIZE = 10
 DEPTH = 2
 DELTA = 0.025
+
+
+def untar_file_to_folder(filepath, output_dir):
+    with tarfile.open(filepath) as tf:
+        tf.extractall(output_dir)
 
 
 class ChempropTests(TestCase):
@@ -224,6 +232,57 @@ class ChempropTests(TestCase):
                 'chemprop',
                 'rmse',
                 2.338310289,
+        ),
+        (
+                'chemprop_atomic_jazzy',
+                'chemprop',
+                'rmse',
+                2.374644468,
+                [
+                    '--additional_atom_descriptors', 'jazzy'
+                ]
+        ),
+        (
+                'chemprop_atomic_kallisto',
+                'chemprop',
+                'rmse',
+                2.321077539,
+                [
+                    '--additional_atom_descriptors', 'kallisto'
+                ]
+        ),
+        (
+                'chemprop_atomic_jazzy_and_kallisto',
+                'chemprop',
+                'rmse',
+                2.260636431,
+                [
+                    '--additional_atom_descriptors', 'jazzy', 'kallisto'
+                ]
+        ),
+        (
+                'chemprop_jazzy_hbs_features_generator',
+                'chemprop',
+                'rmse',
+                2.400105,
+                ['--features_generator', 'jazzy_hbs']
+        ),
+        (
+                'chemprop_jazzy_hyd_features_generator',
+                'chemprop',
+                'rmse',
+                2.335763,
+                ['--features_generator', 'jazzy_hyd']
+        ),
+        (
+                'chemprop_jazzy_atomic_and_molecular',
+                'chemprop',
+                'rmse',
+                2.336619,
+                [
+                    '--features_generator', 'jazzy_hyd',
+                    '--additional_atom_descriptors', 'jazzy'
+                ]
         ),
         (
                 'chemprop_scaffold_split',
@@ -1336,6 +1395,23 @@ class ChempropTests(TestCase):
 
             mean_score = test_scores.mean()
             self.assertAlmostEqual(mean_score, expected_score, delta=DELTA * expected_score)
+    def test_abs_predict_in_memory_jazzy_kallisto(self):
+        file = "regression_model_jazzy_kallisto.tar.gz"
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            untar_file_to_folder(
+                os.path.join(TEST_DATA_DIR, file), tmp_folder)
+            args_list = ['--test_path', 'data/regression_small.csv',
+                         '--preds_path', '/dev/null',
+                         '--checkpoint_dir', tmp_folder]
+            args = PredictArgs().parse_args(args_list)
+            model_objects = load_model(args=args)
+            smiles_list = [['CCC'], ['CCCC'], ['OCC']]
+            preds = make_predictions(args=args,
+                                     smiles=smiles_list,
+                                     model_objects=model_objects)
+            assert preds == [[-3.6102219301449665],
+                             [-3.5861583065877727],
+                             [-3.361401796920642]]
 
 
 if __name__ == '__main__':

@@ -357,7 +357,8 @@ def get_data(path: str,
              store_row: bool = False,
              logger: Logger = None,
              loss_function: str = None,
-             skip_none_targets: bool = False) -> MoleculeDataset:
+             skip_none_targets: bool = False,
+             additional_atom_descriptors: List[str] = None) -> MoleculeDataset:
     """
     Gets SMILES and target values from a CSV file.
 
@@ -370,6 +371,7 @@ def get_data(path: str,
     :param skip_invalid_smiles: Whether to skip and filter out invalid smiles using :func:`filter_invalid_smiles`.
     :param args: Arguments, either :class:`~chemprop.args.TrainArgs` or :class:`~chemprop.args.PredictArgs`.
     :param data_weights_path: A path to a file containing weights for each molecule in the loss function.
+    :param additional_atom_descriptors: List of additional atomic descriptors to be calculated.
     :param features_path: A list of paths to files containing features. If provided, it is used
                           in place of :code:`args.features_path`.
     :param features_generator: A list of features generators to use. If provided, it is used
@@ -404,6 +406,8 @@ def get_data(path: str,
         constraints_path = constraints_path if constraints_path is not None else args.constraints_path
         max_data_size = max_data_size if max_data_size is not None else args.max_data_size
         loss_function = loss_function if loss_function is not None else args.loss_function
+        additional_atom_descriptors = additional_atom_descriptors \
+            if additional_atom_descriptors is not None else args.additional_atom_descriptors
 
     if isinstance(smiles_columns, str) or smiles_columns is None:
         smiles_columns = preprocess_smiles_columns(path=path, smiles_columns=smiles_columns)
@@ -589,7 +593,8 @@ def get_data(path: str,
                 constraints=all_constraints_data[i] if constraints_data is not None else None,
                 raw_constraints=all_raw_constraints_data[i] if raw_constraints_data is not None else None,
                 overwrite_default_atom_features=args.overwrite_default_atom_features if args is not None else False,
-                overwrite_default_bond_features=args.overwrite_default_bond_features if args is not None else False
+                overwrite_default_bond_features=args.overwrite_default_bond_features if args is not None else False,
+                additional_atom_descriptors=args.additional_atom_descriptors if args is not None else None
             ) for i, (smiles, targets) in tqdm(enumerate(zip(all_smiles, all_targets)),
                                             total=len(all_smiles))
         ])
@@ -608,7 +613,8 @@ def get_data(path: str,
 def get_data_from_smiles(smiles: List[List[str]],
                          skip_invalid_smiles: bool = True,
                          logger: Logger = None,
-                         features_generator: List[str] = None) -> MoleculeDataset:
+                         features_generator: List[str] = None,
+                         args: Union[TrainArgs, PredictArgs] = None) -> MoleculeDataset:
     """
     Converts a list of SMILES to a :class:`~chemprop.data.MoleculeDataset`.
 
@@ -624,7 +630,8 @@ def get_data_from_smiles(smiles: List[List[str]],
         MoleculeDatapoint(
             smiles=smile,
             row=OrderedDict({'smiles': smile}),
-            features_generator=features_generator
+            features_generator=features_generator,
+            additional_atom_descriptors=args.additional_atom_descriptors if args is not None else None
         ) for smile in smiles
     ])
 

@@ -12,6 +12,7 @@ from chemprop.features import get_features_generator
 from chemprop.features import BatchMolGraph, MolGraph
 from chemprop.features import is_explicit_h, is_reaction, is_adding_hs, is_mol, is_keeping_atom_map
 from chemprop.rdkit import make_mol
+from jazzy.utils import JazzyError
 
 # Cache of graph featurizations
 CACHE_GRAPH = True
@@ -73,7 +74,8 @@ class MoleculeDatapoint:
                  raw_constraints: np.ndarray = None,
                  constraints: np.ndarray = None,
                  overwrite_default_atom_features: bool = False,
-                 overwrite_default_bond_features: bool = False):
+                 overwrite_default_bond_features: bool = False,
+                 additional_atom_descriptors: List[Optional[str]] = None):
         """
         :param smiles: A list of the SMILES strings for the molecules.
         :param targets: A list of targets for the molecule (contains None for unknown target values).
@@ -92,7 +94,7 @@ class MoleculeDatapoint:
         :param constraints: A numpy array containing atom/bond-level constraints that are used in training. Param constraints is a subset of param raw_constraints.
         :param overwrite_default_atom_features: Boolean to overwrite default atom features by atom_features.
         :param overwrite_default_bond_features: Boolean to overwrite default bond features by bond_features.
-
+        :param additional_atom_descriptors: Additional atomic descriptors to calculate.
         """
         self.smiles = smiles
         self.targets = targets
@@ -115,6 +117,7 @@ class MoleculeDatapoint:
         self.is_explicit_h_list = [is_explicit_h(x) for x in self.is_mol_list]
         self.is_adding_hs_list = [is_adding_hs(x) for x in self.is_mol_list]
         self.is_keeping_atom_map_list = [is_keeping_atom_map(x) for x in self.is_mol_list]
+        self.additional_atom_descriptors = additional_atom_descriptors
 
         if data_weight is not None:
             self.data_weight = data_weight
@@ -404,9 +407,18 @@ class MoleculeDataset(Dataset):
                             raise NotImplementedError('Atom descriptors are currently only supported with one molecule '
                                                       'per input (i.e., number_of_molecules = 1).')
 
-                        mol_graph = MolGraph(m, d.atom_features, d.bond_features,
-                                             overwrite_default_atom_features=d.overwrite_default_atom_features,
-                                             overwrite_default_bond_features=d.overwrite_default_bond_features)
+                        try:
+                            mol_graph = MolGraph(m, d.atom_features, d.bond_features,
+                                                overwrite_default_atom_features=d.overwrite_default_atom_features,
+                                                overwrite_default_bond_features=d.overwrite_default_bond_features,
+                                                additional_atom_descriptors=d.additional_atom_descriptors)
+                        
+                        # If Jazzy fails, the molecule must be ignored
+                        # or features will be inconsistent
+                        except JazzyError:
+                            print("WARNING: Jazzy/Kallisto - Skipped molecule "
+                                  f"due to featurisation failure: {s}")
+                            continue
                         if cache_graph():
                             SMILES_TO_GRAPH[s] = mol_graph
                     mol_graphs_list.append(mol_graph)

@@ -9,3 +9,5 @@
 chemprop.egg-info
 docs/build
 dist/*
+*_checkpoints
+test_integration_individ.py

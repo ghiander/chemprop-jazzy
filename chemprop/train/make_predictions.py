@@ -61,6 +61,7 @@ def load_data(args: PredictArgs, smiles: List[List[str]]):
             smiles=smiles,
             skip_invalid_smiles=False,
             features_generator=args.features_generator,
+            args=args
         )
     else:
         full_data = get_data(

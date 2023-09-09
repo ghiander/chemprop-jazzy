@@ -14,6 +14,8 @@ def make_mol(s: str, keep_h: bool, add_h: bool, keep_atom_map: bool):
     params = Chem.SmilesParserParams()
     params.removeHs = not keep_h
     mol = Chem.MolFromSmiles(s, params)
+    if not mol:
+        return None
 
     if add_h:
         mol = Chem.AddHs(mol)
