@@ -89,7 +89,7 @@ with tempfile.TemporaryDirectory() as tmp_folder:
     untar_file_to_folder(model_tar, tmp_folder)
 
     # Configure arguments
-    args_list = ['--test_path', 'tests/data/regression_small.csv',
+    args_list = ['--test_path', '/dev/null',
                  '--preds_path', '/dev/null',
                  '--checkpoint_dir', tmp_folder]
     args = chemprop.args.PredictArgs().parse_args(args_list)
