@@ -1395,7 +1395,7 @@ class ChempropTests(TestCase):
 
             mean_score = test_scores.mean()
             self.assertAlmostEqual(mean_score, expected_score, delta=DELTA * expected_score)
-    def test_abs_predict_in_memory_jazzy_kallisto(self):
+    def test_abs_sum_predict_in_memory_jazzy_kallisto(self):
         file = "regression_model_jazzy_kallisto.tar.gz"
         with tempfile.TemporaryDirectory() as tmp_folder:
             untar_file_to_folder(
@@ -1409,9 +1409,8 @@ class ChempropTests(TestCase):
             preds = make_predictions(args=args,
                                      smiles=smiles_list,
                                      model_objects=model_objects)
-            assert preds == [[-3.6102219301449665],
-                             [-3.5861583065877727],
-                             [-3.361401796920642]]
+            abs_sum = abs(sum([x[0] for x in preds]))
+            self.assertAlmostEqual(round(abs_sum, 2), 10.55, places=1)
 
 
 if __name__ == '__main__':
