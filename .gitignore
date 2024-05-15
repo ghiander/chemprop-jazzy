@@ -11,3 +11,4 @@ docs/build
 dist/*
 *_checkpoints
 test_integration_individ.py
+.venv

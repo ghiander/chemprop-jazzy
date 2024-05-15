@@ -32,8 +32,8 @@ To use `chemprop` with GPUs, you will need:
 
 1. `git clone https://github.com/ghiander/chemprop-jazzy.git`
 2. `cd chemprop-jazzy`
-3. `python<version> -m venv jazzprop` (used <version> 3.8 at the time of writing - specifically Python 3.8.5)
-4. `source <path_prefix_to_environment>/jazzprop/bin/activate` (e.g. `/home/ghiander/jazzprop/bin/activate`)
+3. `python<version> -m venv .venv` (used <version> 3.8 at the time of writing - specifically Python 3.8.5)
+4. `source <path_prefix_to_environment>/.venv/bin/activate` (e.g. `/home/ghiander/chemprop-jazzy/.venv/bin/activate`)
 5. `python -m pip install flake8 pytest parameterized` (optional - for developers)
 6. `python -m pip install -e .` (make sure you are inside `chemprop-jazzy`)
 

@@ -11,8 +11,8 @@ from .scaler import StandardScaler, AtomBondScaler
 from chemprop.features import get_features_generator
 from chemprop.features import BatchMolGraph, MolGraph
 from chemprop.features import is_explicit_h, is_reaction, is_adding_hs, is_mol, is_keeping_atom_map
+from chemprop.features.jazzy import JazzyError
 from chemprop.rdkit import make_mol
-from jazzy.utils import JazzyError
 
 # Cache of graph featurizations
 CACHE_GRAPH = True

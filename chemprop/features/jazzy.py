@@ -5,7 +5,6 @@ from jazzy.core import kallisto_molecule_from_rdkit_molecule
 from jazzy.core import get_covalent_atom_idxs
 from jazzy.core import get_charges_from_kallisto_molecule
 from jazzy.core import calculate_polar_strength_map
-from jazzy.utils import JazzyError
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -15,6 +14,10 @@ logging.basicConfig(
     level=logging.WARNING,
     datefmt="%H:%M:%S",
 )
+
+
+class JazzyError(Exception):
+    pass
 
 
 def calculate_jazzy_and_kallisto_features(mh):
