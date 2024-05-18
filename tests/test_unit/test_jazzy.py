@@ -32,12 +32,14 @@ def _get_water_hydrogen_idx(water_mol):
 water_mol = _create_water_mol()
 
 
+@pytest.mark.jazzy
 def test_jazzy_calibration():
     jazzy_list, _ = calculate_jazzy_and_kallisto_features(water_mol)
     expected = [{'sd': 0.0, 'sa': 1.0, 'num_lp': 2}, {'sd': 1.0, 'sa': 0.0, 'num_lp': 0}, {'sd': 1.0, 'sa': 0.0, 'num_lp': 0}]
     assert jazzy_list == expected
 
 
+@pytest.mark.jazzy
 def test_jazzy_encoding():
     jazzy_list, _ = calculate_jazzy_and_kallisto_features(water_mol)
     encoded_list = encode_feature_list('jazzy', jazzy_list)
@@ -65,12 +67,14 @@ def test_jazzy_encoding():
     assert hydrogen_vector["num_lp"][1] == 0
 
 
+@pytest.mark.jazzy
 def test_kallisto_calibration():
     _, kallisto_list = calculate_jazzy_and_kallisto_features(water_mol)
     expected = [{'eeq': -0.6, 'alp': 5}, {'eeq': 0.3, 'alp': 0}, {'eeq': 0.3, 'alp': 0}]
     assert kallisto_list == expected
 
 
+@pytest.mark.jazzy
 def test_kallisto_encoding():
     _, kallisto_list = calculate_jazzy_and_kallisto_features(water_mol)
     encoded_list = encode_feature_list('kallisto', kallisto_list)

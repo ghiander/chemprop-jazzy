@@ -11,11 +11,13 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 
-logging.basicConfig(
-    format="Jazzy %(levelname)s: [%(asctime)s] %(message)s",
-    level=logging.WARNING,
-    datefmt="%H:%M:%S",
-)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+formatter = logging.Formatter("Jazzy %(levelname)s: [%(asctime)s] %(message)s")
+formatter.datefmt = "%H:%M:%S"
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 class JazzyError(Exception):
@@ -50,7 +52,7 @@ def _embed_rdkit_molecule(mh):
     """Generates 3D coordinates for a molecule."""
     emb_code = AllChem.EmbedMolecule(mh, randomSeed=11)
     if emb_code == -1:
-        logging.error("The RDKit embedding has failed "
+        logger.error("The RDKit embedding has failed "
                       f"for the molecule: {Chem.MolToSmiles(mh)}")
         raise JazzyError("Could not embed the compound.")
     return mh

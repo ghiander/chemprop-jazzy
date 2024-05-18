@@ -1,4 +1,5 @@
 """Chemprop integration tests."""
+import pytest
 import tarfile
 import tempfile
 from flask import url_for
@@ -234,57 +235,6 @@ class ChempropTests(TestCase):
                 2.338310289,
         ),
         (
-                'chemprop_atomic_jazzy',
-                'chemprop',
-                'rmse',
-                2.374644468,
-                [
-                    '--additional_atom_descriptors', 'jazzy'
-                ]
-        ),
-        (
-                'chemprop_atomic_kallisto',
-                'chemprop',
-                'rmse',
-                2.321077539,
-                [
-                    '--additional_atom_descriptors', 'kallisto'
-                ]
-        ),
-        (
-                'chemprop_atomic_jazzy_and_kallisto',
-                'chemprop',
-                'rmse',
-                2.260636431,
-                [
-                    '--additional_atom_descriptors', 'jazzy', 'kallisto'
-                ]
-        ),
-        (
-                'chemprop_jazzy_hbs_features_generator',
-                'chemprop',
-                'rmse',
-                2.400105,
-                ['--features_generator', 'jazzy_hbs']
-        ),
-        (
-                'chemprop_jazzy_hyd_features_generator',
-                'chemprop',
-                'rmse',
-                2.335763,
-                ['--features_generator', 'jazzy_hyd']
-        ),
-        (
-                'chemprop_jazzy_atomic_and_molecular',
-                'chemprop',
-                'rmse',
-                2.336619,
-                [
-                    '--features_generator', 'jazzy_hyd',
-                    '--additional_atom_descriptors', 'jazzy'
-                ]
-        ),
-        (
                 'chemprop_scaffold_split',
                 'chemprop',
                 'rmse',
@@ -338,6 +288,84 @@ class ChempropTests(TestCase):
         )
     ])
     def test_train_single_task_regression(self,
+                                          name: str,
+                                          model_type: str,
+                                          metric: str,
+                                          expected_score: float,
+                                          train_flags: List[str] = None):
+        with TemporaryDirectory() as save_dir:
+            # Train
+            self.train(
+                dataset_type='regression',
+                metric=metric,
+                save_dir=save_dir,
+                model_type=model_type,
+                flags=train_flags
+            )
+
+            # Check results
+            test_scores_data = pd.read_csv(os.path.join(save_dir, TEST_SCORES_FILE_NAME))
+            test_scores = np.array(test_scores_data[f'Mean {metric}'])
+            self.assertEqual(len(test_scores), 1)
+
+            mean_score = np.mean(test_scores)
+            self.assertAlmostEqual(mean_score, expected_score, delta=DELTA*expected_score)
+
+    @parameterized.expand([
+        (
+                'chemprop_atomic_jazzy',
+                'chemprop',
+                'rmse',
+                2.374644468,
+                [
+                    '--additional_atom_descriptors', 'jazzy'
+                ]
+        ),
+        (
+                'chemprop_atomic_kallisto',
+                'chemprop',
+                'rmse',
+                2.321077539,
+                [
+                    '--additional_atom_descriptors', 'kallisto'
+                ]
+        ),
+        (
+                'chemprop_atomic_jazzy_and_kallisto',
+                'chemprop',
+                'rmse',
+                2.260636431,
+                [
+                    '--additional_atom_descriptors', 'jazzy', 'kallisto'
+                ]
+        ),
+        (
+                'chemprop_jazzy_hbs_features_generator',
+                'chemprop',
+                'rmse',
+                2.400105,
+                ['--features_generator', 'jazzy_hbs']
+        ),
+        (
+                'chemprop_jazzy_hyd_features_generator',
+                'chemprop',
+                'rmse',
+                2.335763,
+                ['--features_generator', 'jazzy_hyd']
+        ),
+        (
+                'chemprop_jazzy_atomic_and_molecular',
+                'chemprop',
+                'rmse',
+                2.336619,
+                [
+                    '--features_generator', 'jazzy_hyd',
+                    '--additional_atom_descriptors', 'jazzy'
+                ]
+        )
+    ])
+    @pytest.mark.jazzy
+    def test_train_single_task_jazzy_regression(self,
                                           name: str,
                                           model_type: str,
                                           metric: str,
@@ -1395,6 +1423,8 @@ class ChempropTests(TestCase):
 
             mean_score = test_scores.mean()
             self.assertAlmostEqual(mean_score, expected_score, delta=DELTA * expected_score)
+    
+    @pytest.mark.jazzy
     def test_abs_sum_predict_in_memory_jazzy_kallisto(self):
         file = "regression_model_jazzy_kallisto.tar.gz"
         with tempfile.TemporaryDirectory() as tmp_folder:

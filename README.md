@@ -111,4 +111,5 @@ with tempfile.TemporaryDirectory() as tmp_folder:
 
 ### For developers
 * To run the test suite use `pytest -v`
+* To run only the Jazzy unit/integration tests `pytest -v -m jazzy`
 * To run the only the unit tests use `pytest tests/test_unit`
