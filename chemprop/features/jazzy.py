@@ -1,6 +1,8 @@
 import logging
 from chemprop.features.encoding import bin_fraction
 from chemprop.features.encoding import bin_value
+from chemprop.features.config import JazzyValues
+from chemprop.features.config import KallistoValues
 from jazzy.core import kallisto_molecule_from_rdkit_molecule
 from jazzy.core import get_covalent_atom_idxs
 from jazzy.core import get_charges_from_kallisto_molecule
@@ -70,19 +72,18 @@ def __get_jazzy_features(feat_dict):
     Rounding is needed for binning.
     """
     return {
-            "sd": bin_fraction(feat_dict["sdc"] + feat_dict["sdx"], 0.1),
-            "sa": bin_fraction(feat_dict["sa"], 0.1),
-            "num_lp": feat_dict["num_lp"]
+            "sd": bin_fraction(feat_dict["sdc"] + feat_dict["sdx"], JazzyValues.sd["step"]),
+            "sa": bin_fraction(feat_dict["sa"], JazzyValues.sa["step"]),
+            "num_lp": bin_value(feat_dict["num_lp"], JazzyValues.num_lp["step"])
         }
 
 
 def __get_kallisto_features(feat_dict):
     """
     Selects and rounds Kallisto features.
-    Rounding is needed for binning. Alp is
-    rounded to the nearest 5.
+    Rounding is needed for binning.
     """
     return {
-            "eeq": bin_fraction(feat_dict["eeq"], 0.1),
-            "alp": bin_value(feat_dict["alp"], 5)
+            "eeq": bin_fraction(feat_dict["eeq"], KallistoValues.eeq["step"]),
+            "alp": bin_value(feat_dict["alp"], KallistoValues.alp["step"])
         }
