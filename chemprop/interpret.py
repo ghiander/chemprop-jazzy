@@ -56,7 +56,7 @@ class ChempropModel:
         if self.train_args.bond_descriptor_scaling and self.args.bond_descriptors_size > 0:
             test_data.normalize_features(self.bond_descriptor_scaler, scale_bond_descriptors=True)
 
-        test_data_loader = MoleculeDataLoader(dataset=test_data, batch_size=batch_size)
+        test_data_loader = MoleculeDataLoader(dataset=test_data, batch_size=batch_size, num_workers=self.args.num_workers)
 
         sum_preds = []
         for model in self.checkpoints:
@@ -293,6 +293,7 @@ def mcts(smiles: str,
 
     return rationales
 
+
 @timeit()
 def interpret(args: InterpretArgs) -> None:
     """
@@ -302,8 +303,10 @@ def interpret(args: InterpretArgs) -> None:
     """
 
     if args.number_of_molecules != 1:
-        raise ValueError("Interpreting is currently only available for single-molecule models.")
-    
+        raise ValueError(
+            "Interpreting is currently only available for single-molecule models."
+        )
+
     global C_PUCT, MIN_ATOMS
 
     chemprop_model = ChempropModel(args)

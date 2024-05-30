@@ -7,6 +7,21 @@ To install the library, refer to the [Installation](#installation) section. Bear
 
 Special thanks go Shih-Cheng Li from MIT for his help and support with designing the integration.
 
+## Documentation
+
+* Documentation of Chemprop is available at https://chemprop.readthedocs.io/en/latest/. Note that this site is several versions behind. An up-to-date version of Read the Docs is forthcoming with the release of Chemprop v2.0.
+* This README is currently the best source for documentation on more recently-added features.
+* Please also see descriptions of all the possible command line arguments in our [`args.py`](https://github.com/chemprop/chemprop/blob/master/chemprop/args.py) file.
+
+## Tutorials and Examples
+
+* [Benchmark scripts](https://github.com/chemprop/chemprop_benchmark) - scripts from our 2023 paper, providing examples of many features using Chemprop v1.6.1
+* [ACS Fall 2023 Workshop](https://github.com/chemprop/chemprop-workshop-acs-fall2023) - presentation, interactive demo, exercises on Google Colab with solution key
+* [Google Colab notebook](https://colab.research.google.com/github/chemprop/chemprop/blob/master/colab_demo.ipynb) - several examples, intended to be run in Google Colab rather than as a Jupyter notebook on your local machine
+* [nanoHUB tool](https://nanohub.org/resources/chempropdemo/) - a notebook of examples similar to the Colab notebook above, doesn't require any installation
+  * [YouTube video](https://www.youtube.com/watch?v=TeOl5E8Wo2M) - lecture accompanying nanoHUB tool
+* These [slides](https://docs.google.com/presentation/d/14pbd9LTXzfPSJHyXYkfLxnK8Q80LhVnjImg8a3WqCRM/edit?usp=sharing) provide a Chemprop tutorial and highlight additions as of April 28th, 2020
+
 ## Requirements
 
 For small datasets (~1000 molecules), it is possible to train models within a few minutes on a standard laptop with CPUs only. However, for larger datasets and larger Chemprop models, we recommend using a GPU for significantly faster training.

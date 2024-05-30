@@ -42,8 +42,17 @@ def cross_validate(args: TrainArgs,
     # Initialize relevant variables
     init_seed = args.seed
     save_dir = args.save_dir
-    args.task_names = get_task_names(path=args.data_path, smiles_columns=args.smiles_columns,
-                                     target_columns=args.target_columns, ignore_columns=args.ignore_columns)
+    args.task_names = get_task_names(
+        path=args.data_path,
+        smiles_columns=args.smiles_columns,
+        target_columns=args.target_columns,
+        ignore_columns=args.ignore_columns,
+        loss_function=args.loss_function,
+    )
+
+    args.quantiles = [args.quantile_loss_alpha / 2] * (args.num_tasks // 2) + [1 - args.quantile_loss_alpha / 2] * (
+        args.num_tasks // 2
+    )
 
     # Print command line
     debug('Command line')
@@ -133,22 +142,36 @@ def cross_validate(args: TrainArgs,
     contains_nan_scores = False
     for fold_num in range(args.num_folds):
         for metric, scores in all_scores.items():
-            info(f'\tSeed {init_seed + fold_num} ==> test {metric} = {multitask_mean(scores[fold_num], metric):.6f}')
+            info(f'\tSeed {init_seed + fold_num} ==> test {metric} = '
+                 f'{multitask_mean(scores=scores[fold_num], metric=metric, ignore_nan_metrics=args.ignore_nan_metrics):.6f}')
 
             if args.show_individual_scores:
-                for task_name, score in zip(args.task_names, scores[fold_num]):
+                if args.loss_function == "quantile_interval" and metric == "quantile":
+                    num_tasks = len(args.task_names) // 2
+                    task_names = args.task_names[:num_tasks]
+                    task_names = [f"{task_name} lower" for task_name in task_names] + [
+                                  f"{task_name} upper" for task_name in task_names]
+                else:
+                    task_names = args.task_names
+
+                for task_name, score in zip(task_names, scores[fold_num]):
                     info(f'\t\tSeed {init_seed + fold_num} ==> test {task_name} {metric} = {score:.6f}')
                     if np.isnan(score):
                         contains_nan_scores = True
 
     # Report scores across folds
     for metric, scores in all_scores.items():
-        avg_scores = multitask_mean(scores, axis=1, metric=metric)  # average score for each model across tasks
+        avg_scores = multitask_mean(
+            scores=scores,
+            axis=1,
+            metric=metric,
+            ignore_nan_metrics=args.ignore_nan_metrics
+        )  # average score for each model across tasks
         mean_score, std_score = np.mean(avg_scores), np.std(avg_scores)
         info(f'Overall test {metric} = {mean_score:.6f} +/- {std_score:.6f}')
 
         if args.show_individual_scores:
-            for task_num, task_name in enumerate(args.task_names):
+            for task_num, task_name in enumerate(task_names):
                 info(f'\tOverall test {task_name} {metric} = '
                      f'{np.mean(scores[:, task_num]):.6f} +/- {np.std(scores[:, task_num]):.6f}')
 
@@ -179,7 +202,15 @@ def cross_validate(args: TrainArgs,
                 row += [mean, std] + task_scores.tolist()
             writer.writerow(row)
         else: # all other data types, separate scores by task
-            for task_num, task_name in enumerate(args.task_names):
+            if args.loss_function == "quantile_interval" and metric == "quantile":
+                num_tasks = len(args.task_names) // 2
+                task_names = args.task_names[:num_tasks]
+                task_names = [f"{task_name} (lower quantile)" for task_name in task_names] + [
+                                f"{task_name} (upper quantile)" for task_name in task_names]
+            else:
+                task_names = args.task_names
+
+            for task_num, task_name in enumerate(task_names):
                 row = [task_name]
                 for metric, scores in all_scores.items():
                     task_scores = scores[:, task_num]
@@ -188,7 +219,11 @@ def cross_validate(args: TrainArgs,
                 writer.writerow(row)
 
     # Determine mean and std score of main metric
-    avg_scores = multitask_mean(all_scores[args.metric], metric=args.metric, axis=1)
+    avg_scores = multitask_mean(
+        scores=all_scores[args.metric],
+        metric=args.metric, axis=1,
+        ignore_nan_metrics=args.ignore_nan_metrics
+    )
     mean_score, std_score = np.mean(avg_scores), np.std(avg_scores)
 
     # Optionally merge and save test preds

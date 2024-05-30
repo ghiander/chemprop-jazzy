@@ -122,6 +122,7 @@ def run_training(args: TrainArgs,
             val_data=val_data,
             test_data=test_data,
             smiles_columns=args.smiles_columns,
+            loss_function=args.loss_function,
             logger=logger,
         )
 
@@ -313,24 +314,40 @@ def run_training(args: TrainArgs,
                 metrics=args.metrics,
                 dataset_type=args.dataset_type,
                 scaler=scaler,
+                quantiles=args.quantiles,
                 atom_bond_scaler=atom_bond_scaler,
                 logger=logger
             )
 
             for metric, scores in val_scores.items():
                 # Average validation score\
-                mean_val_score = multitask_mean(scores, metric=metric)
+                mean_val_score = multitask_mean(
+                    scores=scores,
+                    metric=metric,
+                    ignore_nan_metrics=args.ignore_nan_metrics
+                )
                 debug(f'Validation {metric} = {mean_val_score:.6f}')
                 writer.add_scalar(f'validation_{metric}', mean_val_score, n_iter)
 
                 if args.show_individual_scores:
+                    if args.loss_function == "quantile_interval" and metric == "quantile":
+                        num_tasks = len(args.task_names) // 2
+                        task_names = args.task_names[:num_tasks]
+                        task_names = [f"{task_name} lower" for task_name in task_names] + [
+                                        f"{task_name} upper" for task_name in task_names]
+                    else:
+                        task_names = args.task_names
                     # Individual validation scores
-                    for task_name, val_score in zip(args.task_names, scores):
+                    for task_name, val_score in zip(task_names, scores):
                         debug(f'Validation {task_name} {metric} = {val_score:.6f}')
                         writer.add_scalar(f'validation_{task_name}_{metric}', val_score, n_iter)
 
             # Save model checkpoint if improved validation score
-            mean_val_score = multitask_mean(val_scores[args.metric], metric=args.metric)
+            mean_val_score = multitask_mean(
+                scores=val_scores[args.metric],
+                metric=args.metric,
+                ignore_nan_metrics=args.ignore_nan_metrics
+            )
             if args.minimize_score and mean_val_score < best_score or \
                     not args.minimize_score and mean_val_score > best_score:
                 best_score, best_epoch = mean_val_score, epoch
@@ -359,6 +376,7 @@ def run_training(args: TrainArgs,
                 is_atom_bond_targets=args.is_atom_bond_targets,
                 gt_targets=test_data.gt_targets(),
                 lt_targets=test_data.lt_targets(),
+                quantiles=args.quantiles,
                 logger=logger
             )
 
@@ -376,7 +394,7 @@ def run_training(args: TrainArgs,
 
                 if args.show_individual_scores and args.dataset_type != 'spectra':
                     # Individual test scores
-                    for task_name, test_score in zip(args.task_names, scores):
+                    for task_name, test_score in zip(task_names, scores):
                         info(f'Model {model_idx} test {task_name} {metric} = {test_score:.6f}')
                         writer.add_scalar(f'test_{task_name}_{metric}', test_score, n_iter)
         writer.close()
@@ -398,17 +416,22 @@ def run_training(args: TrainArgs,
             is_atom_bond_targets=args.is_atom_bond_targets,
             gt_targets=test_data.gt_targets(),
             lt_targets=test_data.lt_targets(),
-            logger=logger
+            quantiles=args.quantiles,
+            logger=logger,
         )
 
     for metric, scores in ensemble_scores.items():
         # Average ensemble score
-        mean_ensemble_test_score = multitask_mean(scores, metric=metric)
+        mean_ensemble_test_score = multitask_mean(
+            scores=scores,
+            metric=metric,
+            ignore_nan_metrics=args.ignore_nan_metrics
+        )
         info(f'Ensemble test {metric} = {mean_ensemble_test_score:.6f}')
 
         # Individual ensemble scores
         if args.show_individual_scores:
-            for task_name, ensemble_score in zip(args.task_names, scores):
+            for task_name, ensemble_score in zip(task_names, scores):
                 info(f'Ensemble test {task_name} {metric} = {ensemble_score:.6f}')
 
     # Save scores
@@ -431,8 +454,22 @@ def run_training(args: TrainArgs,
                 values = [list(v) for v in values]
                 test_preds_dataframe[bond_target] = values
         else:
-            for i, task_name in enumerate(args.task_names):
-                test_preds_dataframe[task_name] = [pred[i] for pred in avg_test_preds]
+            if args.loss_function == "quantile_interval" and metric == "quantile":
+                num_tasks = len(args.task_names) // 2
+                task_names = args.task_names[:num_tasks]
+                avg_test_preds = np.array(avg_test_preds)
+                num_data = avg_test_preds.shape[0]
+                preds = avg_test_preds.reshape(num_data, 2, num_tasks).mean(axis=1)
+                intervals = abs(np.diff(avg_test_preds.reshape(num_data, 2, num_tasks), axis=1) / 2)
+                intervals = intervals.reshape(num_data, num_tasks)
+                for i, task_name in enumerate(task_names):
+                    test_preds_dataframe[task_name] = [pred[i] for pred in preds]
+                for i, task_name in enumerate(task_names):
+                    task_name = f"{task_name}_{args.quantile_loss_alpha}_half_interval"
+                    test_preds_dataframe[task_name] = [interval[i] for interval in intervals]
+            else:
+                for i, task_name in enumerate(args.task_names):
+                    test_preds_dataframe[task_name] = [pred[i] for pred in avg_test_preds]
 
         test_preds_dataframe.to_csv(os.path.join(args.save_dir, 'test_preds.csv'), index=False)
 

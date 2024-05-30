@@ -17,7 +17,8 @@ from chemprop.data import set_cache_mol, empty_cache
 from chemprop.features import get_available_features_generators
 
 
-Metric = Literal['auc', 'prc-auc', 'rmse', 'mae', 'mse', 'r2', 'accuracy', 'cross_entropy', 'binary_cross_entropy', 'sid', 'wasserstein', 'f1', 'mcc', 'bounded_rmse', 'bounded_mae', 'bounded_mse']
+Metric = Literal['auc', 'prc-auc', 'rmse', 'mae', 'mse', 'r2', 'accuracy', 'cross_entropy', 'binary_cross_entropy', 'sid', 'wasserstein', 'f1', 'mcc', 'bounded_rmse', 'bounded_mae', 'bounded_mse',
+                'recall', 'precision','balanced_accuracy']
 
 
 def get_checkpoint_paths(checkpoint_path: Optional[str] = None,
@@ -259,7 +260,7 @@ class TrainArgs(CommonArgs):
     """Name of the columns to ignore when :code:`target_columns` is not provided."""
     dataset_type: Literal['regression', 'classification', 'multiclass', 'spectra']
     """Type of dataset. This determines the default loss function used during training."""
-    loss_function: Literal['mse', 'bounded_mse', 'binary_cross_entropy', 'cross_entropy', 'mcc', 'sid', 'wasserstein', 'mve', 'evidential', 'dirichlet'] = None
+    loss_function: Literal['mse', 'bounded_mse', 'binary_cross_entropy', 'cross_entropy', 'mcc', 'sid', 'wasserstein', 'mve', 'evidential', 'dirichlet', 'quantile_interval'] = None
     """Choice of loss function. Loss functions are limited to compatible dataset types."""
     multiclass_num_classes: int = 3
     """Number of classes when running multiclass classification."""
@@ -273,7 +274,7 @@ class TrainArgs(CommonArgs):
     """Path to weights for each molecule in the training data, affecting the relative weight of molecules in the loss function"""
     target_weights: List[float] = None
     """Weights associated with each target, affecting the relative weight of targets in the loss function. Must match the number of target columns."""
-    split_type: Literal['random', 'scaffold_balanced', 'predetermined', 'crossval', 'cv', 'cv-no-test', 'index_predetermined', 'random_with_repeated_smiles'] = 'random'
+    split_type: Literal['random', 'scaffold_balanced', 'predetermined', 'crossval', 'cv', 'cv-no-test', 'index_predetermined', 'random_with_repeated_smiles', 'molecular_weight'] = 'random'
     """Method of splitting the data into train/val/test."""
     split_sizes: List[float] = None
     """Split proportions for train/validation/test sets."""
@@ -306,6 +307,8 @@ class TrainArgs(CommonArgs):
     """
     extra_metrics: List[Metric] = []
     """Additional metrics to use to evaluate the model. Not used for early stopping."""
+    ignore_nan_metrics: bool = False
+    """Ignore invalid task metrics (NaNs) when computing average metrics across tasks."""
     save_dir: str = None
     """Directory where model checkpoints will be saved."""
     checkpoint_frzn: str = None
@@ -476,6 +479,8 @@ class TrainArgs(CommonArgs):
     evidential_regularization: float = 0
     """Value used in regularization for evidential loss function. The default value recommended by Soleimany et al.(2021) is 0.2. 
     Optimal value is dataset-dependent; it is recommended that users test different values to find the best value for their model."""
+    quantile_loss_alpha: float = 0.1
+    """Target error bounds for quantile interval loss"""
     overwrite_default_atom_features: bool = False
     """
     Overwrites the default atom descriptors with the new ones instead of concatenating them.
@@ -508,6 +513,7 @@ class TrainArgs(CommonArgs):
         self._task_names = None
         self._crossval_index_sets = None
         self._task_names = None
+        self._quantiles = None
         self._num_tasks = None
         self._features_size = None
         self._train_data_size = None
@@ -550,6 +556,15 @@ class TrainArgs(CommonArgs):
     def num_tasks(self) -> int:
         """The number of tasks being trained on."""
         return len(self.task_names) if self.task_names is not None else 0
+
+    @property
+    def quantiles(self) -> List[float]:
+        """A list of quantiles to be being trained on."""
+        return self._quantiles
+
+    @quantiles.setter
+    def quantiles(self, quantiles: List[float]) -> None:
+        self._quantiles = quantiles
 
     @property
     def features_size(self) -> int:
@@ -612,6 +627,10 @@ class TrainArgs(CommonArgs):
             self._atom_constraints = [False] * len(self.atom_targets)
         return self._atom_constraints
 
+    @atom_constraints.setter
+    def atom_constraints(self, atom_constraints: List[bool]) -> None:
+        self._atom_constraints = atom_constraints
+
     @property
     def bond_constraints(self) -> List[bool]:
         """
@@ -624,6 +643,10 @@ class TrainArgs(CommonArgs):
         else:
             self._bond_constraints = [False] * len(self.bond_targets)
         return self._bond_constraints
+
+    @bond_constraints.setter
+    def bond_constraints(self, bond_constraints: List[bool]) -> None:
+        self._bond_constraints = bond_constraints
 
     def process_args(self) -> None:
         super(TrainArgs, self).process_args()
@@ -710,16 +733,18 @@ class TrainArgs(CommonArgs):
 
         # Process and validate metric and loss function
         if self.metric is None:
-            if self.dataset_type == 'classification':
-                self.metric = 'auc'
-            elif self.dataset_type == 'multiclass':
-                self.metric = 'cross_entropy'
-            elif self.dataset_type == 'spectra':
-                self.metric = 'sid'
-            elif self.dataset_type == 'regression' and self.loss_function == 'bounded_mse':
-                self.metric = 'bounded_mse'
-            elif self.dataset_type == 'regression':
-                self.metric = 'rmse'
+            if self.dataset_type == "classification":
+                self.metric = "auc"
+            elif self.dataset_type == "multiclass":
+                self.metric = "cross_entropy"
+            elif self.dataset_type == "spectra":
+                self.metric = "sid"
+            elif self.dataset_type == "regression" and self.loss_function == "bounded_mse":
+                self.metric = "bounded_mse"
+            elif self.dataset_type == "regression" and self.loss_function == "quantile_interval":
+                self.metric = "quantile"
+            elif self.dataset_type == "regression":
+                self.metric = "rmse"
             else:
                 raise ValueError(f'Dataset type {self.dataset_type} is not supported.')
 
@@ -728,11 +753,14 @@ class TrainArgs(CommonArgs):
                              f'Please only include it once.')
 
         for metric in self.metrics:
-            if not any([(self.dataset_type == 'classification' and metric in ['auc', 'prc-auc', 'accuracy', 'binary_cross_entropy', 'f1', 'mcc']),
-                        (self.dataset_type == 'regression' and metric in ['rmse', 'mae', 'mse', 'r2', 'bounded_rmse', 'bounded_mae', 'bounded_mse']),
+            if not any([(self.dataset_type == 'classification' and metric in ['auc', 'prc-auc', 'accuracy', 'binary_cross_entropy', 'f1', 'mcc', 'recall', 'precision', 'balanced_accuracy', 'confusion_matrix']),
+                        (self.dataset_type == 'regression' and metric in ['rmse', 'mae', 'mse', 'r2', 'bounded_rmse', 'bounded_mae', 'bounded_mse', 'quantile']),
                         (self.dataset_type == 'multiclass' and metric in ['cross_entropy', 'accuracy', 'f1', 'mcc']),
                         (self.dataset_type == 'spectra' and metric in ['sid', 'wasserstein'])]):
                 raise ValueError(f'Metric "{metric}" invalid for dataset type "{self.dataset_type}".')
+
+            if metric == "quantile" and self.loss_function != "quantile_interval":
+                raise ValueError(f'Metric quantile is only compatible with quantile_interval loss.')
 
         if self.loss_function is None:
             if self.dataset_type == 'classification':
@@ -880,7 +908,14 @@ class TrainArgs(CommonArgs):
 
         # check if key molecule index is outside of the number of molecules
         if self.split_key_molecule >= self.number_of_molecules:
-            raise ValueError('The index provided with the argument `--split_key_molecule` must be less than the number of molecules. Note that this index begins with 0 for the first molecule. ')
+            raise ValueError(
+                "The index provided with the argument `--split_key_molecule` must be less than the number of molecules. Note that this index begins with 0 for the first molecule. "
+            )
+
+        if not 0 <= self.quantile_loss_alpha <= 0.5:
+            raise ValueError(
+                "quantile_loss_alpha should be in the range [0, 0.5]"
+            )
 
 
 class PredictArgs(CommonArgs):
@@ -906,9 +941,21 @@ class PredictArgs(CommonArgs):
         'classification',
         'dropout',
         'spectra_roundrobin',
+        'dirichlet',
     ] = None
     """The method of calculating uncertainty."""
-    calibration_method: Literal['zscaling', 'tscaling', 'zelikman_interval', 'mve_weighting', 'platt', 'isotonic'] = None
+    calibration_method: Literal[
+        "zscaling",
+        "tscaling",
+        "zelikman_interval",
+        "mve_weighting",
+        "platt",
+        "isotonic",
+        "conformal",
+        "conformal_adaptive",
+        "conformal_regression",
+        "conformal_quantile_regression",
+    ] = None
     """Methods used for calibrating the uncertainty calculated with uncertainty method."""
     evaluation_methods: List[str] = None
     """The methods used for evaluating the uncertainty performance if the test data provided includes targets.
@@ -917,6 +964,8 @@ class PredictArgs(CommonArgs):
     """Location to save the results of uncertainty evaluations."""
     uncertainty_dropout_p: float = 0.1
     """The probability to use for Monte Carlo dropout uncertainty estimation."""
+    conformal_alpha: float = 0.1
+    """Target error rate for conformal prediction."""
     dropout_sampling_size: int = 10
     """The number of samples to use for Monte Carlo dropout uncertainty estimation. Distinct from the dropout used during training."""
     calibration_interval_percentile: float = 95
@@ -945,6 +994,8 @@ class PredictArgs(CommonArgs):
         if self.regression_calibrator_metric is None:
             if self.calibration_method == 'zelikman_interval':
                 self.regression_calibrator_metric = 'interval'
+            elif self.calibration_method in ['conformal_regression', 'conformal_quantile_regression']:
+                self.regression_calibrator_metric = None
             else:
                 self.regression_calibrator_metric = 'stdev'
 
@@ -993,8 +1044,19 @@ class PredictArgs(CommonArgs):
             ('`--atom_descriptors_path`', self.atom_descriptors_path, self.calibration_atom_descriptors_path),
             ('`--bond_descriptors_path`', self.bond_descriptors_path, self.calibration_bond_descriptors_path)
         ]:
-            if base_features_path is not None and self.calibration_path is not None and cal_features_path is None:
-                raise ValueError(f'Additional features were provided using the argument {features_argument}. The same kinds of features must be provided for the calibration dataset.')
+            if (
+                base_features_path is not None
+                and self.calibration_path is not None
+                and cal_features_path is None
+            ):
+                raise ValueError(
+                    f"Additional features were provided using the argument {features_argument}. The same kinds of features must be provided for the calibration dataset."
+                )
+
+        if not 0 <= self.conformal_alpha <= 1:
+            raise ValueError(
+                "conformal_alpha should be in the range [0,1]"
+            )
 
 
 class InterpretArgs(CommonArgs):

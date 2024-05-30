@@ -62,8 +62,8 @@ class MoleculeDatapoint:
                  bond_targets: List[Optional[float]] = None,
                  row: OrderedDict = None,
                  data_weight: float = None,
-                 gt_targets: List[bool] = None,
-                 lt_targets: List[bool] = None,
+                 gt_targets: List[List[bool]] = None,
+                 lt_targets: List[List[bool]] = None,
                  features: np.ndarray = None,
                  features_generator: List[str] = None,
                  phase_features: List[float] = None,
@@ -142,7 +142,7 @@ class MoleculeDatapoint:
                         # for H2
                         elif m is not None and m.GetNumHeavyAtoms() == 0:
                             # not all features are equally long, so use methane as dummy molecule to determine length
-                            self.features.extend(np.zeros(len(features_generator(Chem.MolFromSmiles('C')))))                           
+                            self.features.extend(np.zeros(len(features_generator(Chem.MolFromSmiles('C')))))
                     else:
                         if m[0] is not None and m[1] is not None and m[0].GetNumHeavyAtoms() > 0:
                             self.features.extend(features_generator(m[0]))
@@ -182,7 +182,21 @@ class MoleculeDatapoint:
     @property
     def mol(self) -> List[Union[Chem.Mol, Tuple[Chem.Mol, Chem.Mol]]]:
         """Gets the corresponding list of RDKit molecules for the corresponding SMILES list."""
-        mol = make_mols(self.smiles, self.is_reaction_list, self.is_explicit_h_list, self.is_adding_hs_list, self.is_keeping_atom_map_list)
+        if self.atom_targets is not None or self.bond_targets is not None:
+            # When the original atom mapping is used, the explicit hydrogens specified in the input SMILES should be used
+            # However, the explicit Hs can only be added for reactions with `--explicit_h` flag
+            # To fix this, the attribute of `keep_h_list` in make_mols() is set to match the `keep_atom_map_list`
+            mol = make_mols(smiles=self.smiles,
+                            reaction_list=self.is_reaction_list,
+                            keep_h_list=self.is_keeping_atom_map_list,
+                            add_h_list=self.is_adding_hs_list,
+                            keep_atom_map_list=self.is_keeping_atom_map_list)
+        else:
+            mol = make_mols(smiles=self.smiles,
+                            reaction_list=self.is_reaction_list,
+                            keep_h_list=self.is_explicit_h_list,
+                            add_h_list=self.is_adding_hs_list,
+                            keep_atom_map_list=self.is_keeping_atom_map_list)
         if cache_mol():
             for s, m in zip(self.smiles, mol):
                 SMILES_TO_MOL[s] = m
@@ -224,6 +238,14 @@ class MoleculeDatapoint:
         :return: A list of bond types for each molecule.
         """
         return [[b.GetBondTypeAsDouble() for b in self.mol[i].GetBonds()] for i in range(self.number_of_molecules)]
+    @property
+    def max_molwt(self) -> float:
+        """
+        Gets the maximum molecular weight among all the molecules in the :class:`MoleculeDatapoint`.
+
+        :return: The maximum molecular weight.
+        """
+        return max(Chem.rdMolDescriptors.CalcExactMolWt(mol) for mol in self.mol)
 
     def set_features(self, features: np.ndarray) -> None:
         """

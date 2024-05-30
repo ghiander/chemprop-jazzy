@@ -16,7 +16,6 @@ import numpy as np
 from torch.optim import Adam, Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from tqdm import tqdm
-from scipy.stats.mstats import gmean
 
 from chemprop.args import PredictArgs, TrainArgs, FingerprintArgs
 from chemprop.data import StandardScaler, AtomBondScaler, MoleculeDataset, preprocess_smiles_columns, get_task_names
@@ -609,8 +608,9 @@ def save_smiles_splits(
     train_data: MoleculeDataset = None,
     val_data: MoleculeDataset = None,
     test_data: MoleculeDataset = None,
-    logger: logging.Logger = None,
     smiles_columns: List[str] = None,
+    loss_function: str = None,
+    logger: logging.Logger = None,
 ) -> None:
     """
     Saves a csv file with train/val/test splits of target data and additional features.
@@ -627,6 +627,7 @@ def save_smiles_splits(
     :param val_data: Validation :class:`~chemprop.data.data.MoleculeDataset`.
     :param test_data: Test :class:`~chemprop.data.data.MoleculeDataset`.
     :param smiles_columns: The name of the column containing SMILES. By default, uses the first column.
+    :param loss_function: The loss function to be used in training.
     :param logger: A logger for recording output.
     """
     makedirs(save_dir)
@@ -653,7 +654,15 @@ def save_smiles_splits(
             indices_by_smiles[smiles] = i
 
     if task_names is None:
-        task_names = get_task_names(path=data_path, smiles_columns=smiles_columns)
+        task_names = get_task_names(
+            path=data_path,
+            smiles_columns=smiles_columns,
+            loss_function=loss_function,
+            )
+
+    if loss_function == "quantile_interval":
+        num_tasks = len(task_names) // 2
+        task_names = task_names[:num_tasks]
 
     features_header = []
     if features_path is not None:
@@ -690,6 +699,8 @@ def save_smiles_splits(
             dataset_targets = dataset.targets()
             for i, smiles in enumerate(dataset.smiles()):
                 targets = [x.tolist() if isinstance(x, np.ndarray) else x for x in dataset_targets[i]]
+                # correct the number of targets when running quantile regression
+                targets = targets[:len(task_names)]
                 writer.writerow(smiles + targets)
 
         if features_path is not None:
@@ -842,6 +853,7 @@ def multitask_mean(
     scores: np.ndarray,
     metric: str,
     axis: int = None,
+    ignore_nan_metrics: bool = False,
 ) -> float:
     """
     A function for combining the metric scores across different
@@ -853,19 +865,23 @@ def multitask_mean(
 
     :param scores: The scores from different tasks for a single metric.
     :param metric: The metric used to generate the scores.
-    :axis: The axis along which to take the mean.
+    :param axis: The axis along which to take the mean.
+    :param ignore_nan_metrics: Ignore invalid task metrics (NaNs) when computing average metrics across tasks.
     :return: The combined score across the tasks.
     """
-    scale_dependent_metrics = ["rmse", "mae", "mse", "bounded_rmse", "bounded_mae", "bounded_mse"]
+    scale_dependent_metrics = ["rmse", "mae", "mse", "bounded_rmse", "bounded_mae", "bounded_mse", "quantile"]
     nonscale_dependent_metrics = [
         "auc", "prc-auc", "r2", "accuracy", "cross_entropy",
-        "binary_cross_entropy", "sid", "wasserstein", "f1", "mcc",
+        "binary_cross_entropy", "sid", "wasserstein", "f1", "mcc", "recall", "precision", "balanced_accuracy", "confusion_matrix"
+
     ]
 
+    mean_fn = np.nanmean if ignore_nan_metrics else np.mean
+
     if metric in scale_dependent_metrics:
-        return gmean(scores, axis=axis)
+        return np.exp(mean_fn(np.log(scores), axis=axis))
     elif metric in nonscale_dependent_metrics:
-        return np.mean(scores, axis=axis)
+        return mean_fn(scores, axis=axis)
     else:
         raise NotImplementedError(
             f"The metric used, {metric}, has not been added to the list of\
