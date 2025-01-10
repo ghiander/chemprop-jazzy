@@ -313,6 +313,16 @@ class ChempropTests(TestCase):
 
     @parameterized.expand([
         (
+                'chemprop_no_vanilla_atomic_jazzy',
+                'chemprop',
+                'rmse',
+                2.419010934,
+                [   
+                    '--no_rdkit_atom_descriptors',
+                    '--additional_atom_descriptors', 'jazzy'
+                ]
+        ),
+        (
                 'chemprop_atomic_jazzy',
                 'chemprop',
                 'rmse',
