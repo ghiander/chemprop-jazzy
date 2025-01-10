@@ -80,6 +80,13 @@ chemprop_train --data_path tests/data/regression.csv --dataset_type regression -
 chemprop_train --data_path tests/data/regression.csv --dataset_type regression --save_dir test_model_checkpoints --quiet --additional_atom_descriptors jazzy --features_generator jazzy_hbs
 ```
 
+It is also now possible to disable the atomic features calculated by Chemprop by default. This allows assessing the accuracy of model only trained using additional features.
+
+```bash
+# Includes only Kallisto and Jazzy atomic properties - excludes RDKit properties calculated by Chemprop by default (vanilla properties)
+chemprop_train --data_path tests/data/regression.csv --dataset_type regression --save_dir test_model_checkpoints --quiet --additional_atom_descriptors kallisto jazzy --no_rdkit_atom_descriptors
+```
+
 ### Prediction (via CLI)
 ```bash
 # Chemprop automatically understands whether Jazzy or/and Kallisto were used to train the model
