@@ -70,13 +70,15 @@ def reset_featurization_parameters(logger: logging.Logger = None) -> None:
 
 
 def get_atom_fdim(overwrite_default_atom: bool = False, is_reaction: bool = False,
-                  additional_atom_descriptors: list = None) -> int:
+                  additional_atom_descriptors: list = None,
+                  no_rdkit_atom_descriptors: bool = False) -> int:
     """
     Gets the dimensionality of the atom feature vector.
 
     :param overwrite_default_atom: Whether to overwrite the default atom descriptors.
     :param is_reaction: Whether to add :code:`EXTRA_ATOM_FDIM` for reaction input when :code:`REACTION_MODE` is not None.
     :param additional_atom_descriptors: Additional atom descriptors that are encoded in the graph.
+    :param no_rdkit_atom_descriptors: Boolean to disable the calculation of basic RDKit descriptors.
     :return: The dimensionality of the atom feature vector.
     """
     if PARAMS.REACTION_MODE:
@@ -87,6 +89,8 @@ def get_atom_fdim(overwrite_default_atom: bool = False, is_reaction: bool = Fals
         if additional_atom_descriptors:
             for descriptor in additional_atom_descriptors:
                 fdim += ADDITIONAL_ATOM_PARAM_LENGTHS[descriptor]
+        if no_rdkit_atom_descriptors:
+            fdim -= PARAMS.ATOM_FDIM
         return fdim
 
 
@@ -172,7 +176,8 @@ def get_bond_fdim(atom_messages: bool = False,
                   overwrite_default_bond: bool = False,
                   overwrite_default_atom: bool = False,
                   is_reaction: bool = False,
-                  additional_atom_descriptors: list = None) -> int:
+                  additional_atom_descriptors: list = None,
+                  no_rdkit_atom_descriptors: bool = False) -> int:
     """
     Gets the dimensionality of the bond feature vector.
 
@@ -183,6 +188,7 @@ def get_bond_fdim(atom_messages: bool = False,
     :param overwrite_default_atom: Whether to overwrite the default atom descriptors.
     :param is_reaction: Whether to add :code:`EXTRA_BOND_FDIM` for reaction input when :code:`REACTION_MODE:` is not None.
     :param additional_atom_descriptors: Additional atom descriptors that are encoded in the graph.
+    :param no_rdkit_atom_descriptors: Boolean to disable the calculation of basic RDKit descriptors.
     :return: The dimensionality of the bond feature vector.
     """
 
@@ -192,7 +198,8 @@ def get_bond_fdim(atom_messages: bool = False,
     else:
         # TODO: Maybe additional_atom_descriptors applies to reactions as well
         return (not overwrite_default_bond) * PARAMS.BOND_FDIM + PARAMS.EXTRA_BOND_FDIM + \
-            (not atom_messages) * get_atom_fdim(overwrite_default_atom=overwrite_default_atom, is_reaction=is_reaction, additional_atom_descriptors=additional_atom_descriptors)
+            (not atom_messages) * get_atom_fdim(overwrite_default_atom=overwrite_default_atom, is_reaction=is_reaction, additional_atom_descriptors=additional_atom_descriptors,
+            no_rdkit_atom_descriptors=no_rdkit_atom_descriptors)
 
 
 def set_extra_bond_fdim(extra):
@@ -318,6 +325,7 @@ class MolGraph:
     * :code:`reaction_mode`:  Reaction mode to construct atom and bond feature vectors.
     * :code:`b2br`: A mapping from f_bonds to real bonds in molecule recorded in targets.
     * :code:`additional_atom_descriptors`: A list of additional atomic descriptors to be calculated.
+    * :code:`no_rdkit_atom_descriptors`: Boolean to disable the calculation of basic RDKit descriptors.
     """
 
     def __init__(self, mol: Union[str, Chem.Mol, Tuple[Chem.Mol, Chem.Mol]],
@@ -325,14 +333,8 @@ class MolGraph:
                  bond_features_extra: np.ndarray = None,
                  overwrite_default_atom_features: bool = False,
                  overwrite_default_bond_features: bool = False,
-                 additional_atom_descriptors: List[str] = None):
-        """
-        :param mol: A SMILES or an RDKit molecule.
-        :param atom_features_extra: A list of 2D numpy array containing additional atom features to featurize the molecule.
-        :param bond_features_extra: A list of 2D numpy array containing additional bond features to featurize the molecule.
-        :param overwrite_default_atom_features: Boolean to overwrite default atom features by atom_features instead of concatenating.
-        :param overwrite_default_bond_features: Boolean to overwrite default bond features by bond_features instead of concatenating.
-        """
+                 additional_atom_descriptors: List[str] = None,
+                 no_rdkit_atom_descriptors: bool = False):
         self.is_mol = is_mol(mol)
         self.is_reaction = is_reaction(self.is_mol)
         self.is_explicit_h = is_explicit_h(self.is_mol)
@@ -340,6 +342,7 @@ class MolGraph:
         self.is_keeping_atom_map = is_keeping_atom_map(self.is_mol)
         self.reaction_mode = reaction_mode()
         self.additional_atom_descriptors = additional_atom_descriptors
+        self.no_rdkit_atom_descriptors = no_rdkit_atom_descriptors
         
         # Convert SMILES to RDKit molecule if necessary
         if type(mol) == str:
@@ -351,6 +354,8 @@ class MolGraph:
         self.n_atoms = 0  # number of atoms
         self.n_bonds = 0  # number of bonds
         self.f_atoms = []  # mapping from atom index to atom features
+        if not self.is_reaction:
+            self.f_atoms = [list() for atom in mol.GetAtoms()]
         self.f_bonds = []  # mapping from bond index to concat(in_atom, bond) features
         self.a2b = []  # mapping from atom index to incoming bond indices
         self.b2a = []  # mapping from bond index to the index of the atom the bond is coming from
@@ -360,7 +365,8 @@ class MolGraph:
 
         if not self.is_reaction:
             # Get atom features
-            self.f_atoms = [atom_features(atom) for atom in mol.GetAtoms()]
+            if not self.no_rdkit_atom_descriptors:
+                self.f_atoms = [atom_features(atom) for atom in mol.GetAtoms()]
             self.calculate_additional_descriptors(mol)
             from chemprop.features.additional_features import ADDITIONAL_ATOM_PARAM_LENGTHS
 
@@ -515,17 +521,17 @@ class MolGraph:
                     self.b2revb.append(b1)
                     self.n_bonds += 2
 
-    def _concatenate_features_to_attribute(self,
-                                           feature_dict_list: List[dict],
-                                           self_attribute):
+    def _extend_list_with_dict_list_values(self,
+                                           dict_list: List[dict],
+                                           list_to_extend):
         """
-        Attaches values (features) from a list of dictionaries
-        to an attribute (instance attribute).
+        Extends a list of values (list_to_extend) with
+        the values of a list of dictionaries (dict_list).
         """
-        assert len(feature_dict_list) == len(self_attribute)
-        for i in range(len(self_attribute)):
-            for feature in feature_dict_list[i].values():
-                self_attribute[i] += feature
+        assert len(dict_list) == len(list_to_extend)
+        for i in range(len(list_to_extend)):
+            for feature in dict_list[i].values():
+                list_to_extend[i] += feature
 
     def calculate_additional_descriptors(self, mol):
         if self.additional_atom_descriptors:
@@ -537,11 +543,11 @@ class MolGraph:
                 jazzy, kallisto = calculate_jazzy_and_kallisto_features(mol)
                 if "jazzy" in self.additional_atom_descriptors:
                     jazzy = encode_feature_list('jazzy', jazzy)
-                    self._concatenate_features_to_attribute(jazzy,
+                    self._extend_list_with_dict_list_values(jazzy,
                                                             self.f_atoms)
                 if "kallisto" in self.additional_atom_descriptors:
                     kallisto = encode_feature_list('kallisto', kallisto)
-                    self._concatenate_features_to_attribute(kallisto,
+                    self._extend_list_with_dict_list_values(kallisto,
                                                             self.f_atoms)
 
 class BatchMolGraph:
@@ -569,13 +575,16 @@ class BatchMolGraph:
         self.overwrite_default_bond_features = mol_graphs[0].overwrite_default_bond_features
         self.is_reaction = mol_graphs[0].is_reaction
         self.additional_atom_descriptors = mol_graphs[0].additional_atom_descriptors
+        self.no_rdkit_atom_descriptors = mol_graphs[0].no_rdkit_atom_descriptors
         self.atom_fdim = get_atom_fdim(overwrite_default_atom=self.overwrite_default_atom_features,
                                        is_reaction=self.is_reaction,
-                                       additional_atom_descriptors=self.additional_atom_descriptors)
+                                       additional_atom_descriptors=self.additional_atom_descriptors,
+                                       no_rdkit_atom_descriptors=self.no_rdkit_atom_descriptors)
         self.bond_fdim = get_bond_fdim(overwrite_default_bond=self.overwrite_default_bond_features,
-                                      overwrite_default_atom=self.overwrite_default_atom_features,
-                                      is_reaction=self.is_reaction,
-                                      additional_atom_descriptors=self.additional_atom_descriptors)
+                                       overwrite_default_atom=self.overwrite_default_atom_features,
+                                       is_reaction=self.is_reaction,
+                                       additional_atom_descriptors=self.additional_atom_descriptors,
+                                       no_rdkit_atom_descriptors=self.no_rdkit_atom_descriptors)
 
         # Start n_atoms and n_bonds at 1 b/c zero padding
         self.n_atoms = 1  # number of atoms (start at 1 b/c need index 0 as padding)

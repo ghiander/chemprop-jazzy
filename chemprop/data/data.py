@@ -75,7 +75,8 @@ class MoleculeDatapoint:
                  constraints: np.ndarray = None,
                  overwrite_default_atom_features: bool = False,
                  overwrite_default_bond_features: bool = False,
-                 additional_atom_descriptors: List[Optional[str]] = None):
+                 additional_atom_descriptors: List[Optional[str]] = None,
+                 no_rdkit_atom_descriptors: bool = False):
         """
         :param smiles: A list of the SMILES strings for the molecules.
         :param targets: A list of targets for the molecule (contains None for unknown target values).
@@ -95,6 +96,7 @@ class MoleculeDatapoint:
         :param overwrite_default_atom_features: Boolean to overwrite default atom features by atom_features.
         :param overwrite_default_bond_features: Boolean to overwrite default bond features by bond_features.
         :param additional_atom_descriptors: Additional atomic descriptors to calculate.
+        :param no_rdkit_atom_descriptors: Boolean to disable the calculation of basic RDKit descriptors.
         """
         self.smiles = smiles
         self.targets = targets
@@ -118,6 +120,7 @@ class MoleculeDatapoint:
         self.is_adding_hs_list = [is_adding_hs(x) for x in self.is_mol_list]
         self.is_keeping_atom_map_list = [is_keeping_atom_map(x) for x in self.is_mol_list]
         self.additional_atom_descriptors = additional_atom_descriptors
+        self.no_rdkit_atom_descriptors = no_rdkit_atom_descriptors
 
         if data_weight is not None:
             self.data_weight = data_weight
@@ -433,8 +436,8 @@ class MoleculeDataset(Dataset):
                             mol_graph = MolGraph(m, d.atom_features, d.bond_features,
                                                 overwrite_default_atom_features=d.overwrite_default_atom_features,
                                                 overwrite_default_bond_features=d.overwrite_default_bond_features,
-                                                additional_atom_descriptors=d.additional_atom_descriptors)
-                        
+                                                additional_atom_descriptors=d.additional_atom_descriptors,
+                                                no_rdkit_atom_descriptors=d.no_rdkit_atom_descriptors)
                         # If Jazzy fails, the molecule must be ignored
                         # or features will be inconsistent
                         except JazzyError:

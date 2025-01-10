@@ -429,7 +429,12 @@ class TrainArgs(CommonArgs):
     """
     additional_atom_descriptors: List[str] = None
     """
-    Additional atomic descriptors that are included along with the basic RDKit counts used in the MPNN.
+    Additional atomic descriptors that are included along with the RDKit atom descriptors generated in featurization.py and used in the MPNN.
+    """
+    no_rdkit_atom_descriptors: bool = False
+    """
+    Removes the RDKit atom descriptors generated in featurization.py. This option is intended to be used in combination with
+    additional_atom_descriptors to promote the only use of additional_atom_descriptors.
     """
     is_atom_bond_targets: bool = False
     """
@@ -670,12 +675,19 @@ class TrainArgs(CommonArgs):
                 config = json.load(f)
                 for key, value in config.items():
                     setattr(self, key, value)
+        
+        # Additional descriptors if basic descriptors are disabled
+        if self.no_rdkit_atom_descriptors:
+            if not self.additional_atom_descriptors:
+                raise ValueError('additional_atom_descriptors must be specified when '
+                                 'no_rdkit_atom_descriptors is set to True. '
+                                 'See the CLI documentation for details.')
 
         # Additional descriptors
         if self.additional_atom_descriptors:
             for descriptor in self.additional_atom_descriptors:
                 if not any([descriptor in ADDITIONAL_ATOM_DESCRIPTORS]):
-                    raise ValueError(f'Additional descriptor "{descriptor}" invalid".'
+                    raise ValueError(f'Additional descriptor "{descriptor}" invalid". '
                                      'Accepted additional atomic descriptors: '
                                      f'{ADDITIONAL_ATOM_DESCRIPTORS}')
 

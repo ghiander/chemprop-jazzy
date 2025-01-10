@@ -211,12 +211,14 @@ class MPN(nn.Module):
         self.reaction_solvent = args.reaction_solvent
         self.atom_fdim = atom_fdim or get_atom_fdim(overwrite_default_atom=args.overwrite_default_atom_features,
                                                     is_reaction=self.reaction if self.reaction is not False else self.reaction_solvent,
-                                                    additional_atom_descriptors=args.additional_atom_descriptors)
+                                                    additional_atom_descriptors=args.additional_atom_descriptors,
+                                                    no_rdkit_atom_descriptors=args.no_rdkit_atom_descriptors)
         self.bond_fdim = bond_fdim or get_bond_fdim(overwrite_default_atom=args.overwrite_default_atom_features,
                                                     overwrite_default_bond=args.overwrite_default_bond_features,
                                                     atom_messages=args.atom_messages,
                                                     is_reaction=self.reaction if self.reaction is not False else self.reaction_solvent,
-                                                    additional_atom_descriptors=args.additional_atom_descriptors)
+                                                    additional_atom_descriptors=args.additional_atom_descriptors,
+                                                    no_rdkit_atom_descriptors=args.no_rdkit_atom_descriptors)
         self.features_only = args.features_only
         self.use_input_features = args.use_input_features
         self.device = args.device

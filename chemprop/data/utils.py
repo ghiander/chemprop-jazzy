@@ -376,7 +376,8 @@ def get_data(path: str,
              logger: Logger = None,
              loss_function: str = None,
              skip_none_targets: bool = False,
-             additional_atom_descriptors: List[str] = None) -> MoleculeDataset:
+             additional_atom_descriptors: List[str] = None,
+             no_rdkit_atom_descriptors: bool = False) -> MoleculeDataset:
     """
     Gets SMILES and target values from a CSV file.
 
@@ -390,6 +391,7 @@ def get_data(path: str,
     :param args: Arguments, either :class:`~chemprop.args.TrainArgs` or :class:`~chemprop.args.PredictArgs`.
     :param data_weights_path: A path to a file containing weights for each molecule in the loss function.
     :param additional_atom_descriptors: List of additional atomic descriptors to be calculated.
+    :param no_rdkit_atom_descriptors: Disables the calculation of RDKit descriptors used by the MPNN.
     :param features_path: A list of paths to files containing features. If provided, it is used
                           in place of :code:`args.features_path`.
     :param features_generator: A list of features generators to use. If provided, it is used
@@ -426,6 +428,8 @@ def get_data(path: str,
         loss_function = loss_function if loss_function is not None else args.loss_function
         additional_atom_descriptors = additional_atom_descriptors \
             if additional_atom_descriptors is not None else args.additional_atom_descriptors
+        no_rdkit_atom_descriptors = no_rdkit_atom_descriptors \
+            if no_rdkit_atom_descriptors is not None else args.no_rdkit_atom_descriptors
 
     if isinstance(smiles_columns, str) or smiles_columns is None:
         smiles_columns = preprocess_smiles_columns(path=path, smiles_columns=smiles_columns)
@@ -613,7 +617,8 @@ def get_data(path: str,
                 raw_constraints=all_raw_constraints_data[i] if raw_constraints_data is not None else None,
                 overwrite_default_atom_features=args.overwrite_default_atom_features if args is not None else False,
                 overwrite_default_bond_features=args.overwrite_default_bond_features if args is not None else False,
-                additional_atom_descriptors=args.additional_atom_descriptors if args is not None else None
+                additional_atom_descriptors=args.additional_atom_descriptors if args is not None else None,
+                no_rdkit_atom_descriptors=args.no_rdkit_atom_descriptors if args is not None else None
             ) for i, (smiles, targets) in tqdm(enumerate(zip(all_smiles, all_targets)),
                                             total=len(all_smiles))
         ])
